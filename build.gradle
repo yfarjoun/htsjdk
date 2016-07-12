@@ -36,13 +36,13 @@ jacoco {
 
 dependencies {
     compile "org.apache.commons:commons-jexl:2.1.1"
-    compile "commons-logging:commons-logging:1.1.1"
-    compile "org.xerial.snappy:snappy-java:1.0.3-rc3"
-    compile "org.apache.commons:commons-compress:1.4.1"
+    compile "commons-logging:commons-logging:1.2"
+    compile "org.xerial.snappy:snappy-java:1.1.2.6"
+    compile "org.apache.commons:commons-compress:1.12"
     compile "org.tukaani:xz:1.5"
     compile "gov.nih.nlm.ncbi:ngs-java:1.2.4"
 
-    testCompile "org.testng:testng:6.9.9"
+    testCompile "org.testng:testng:6.9.10"
 }
 
 sourceCompatibility = 1.8
