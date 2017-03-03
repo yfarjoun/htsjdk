@@ -205,7 +205,13 @@ public class SAMValidationError implements Serializable {
         MISMATCH_MATE_CIGAR_STRING,
 
         /** There is a Cigar String (stored in the MC Tag) for a read whose mate is NOT mapped. */
-        MATE_CIGAR_STRING_INVALID_PRESENCE;
+        MATE_CIGAR_STRING_INVALID_PRESENCE,
+
+        /**
+         * The alignment start or alignment end of the read extend beyond the insert based on the insert size
+         * stored on the read.
+         */
+        READ_EXTENDS_BEYOND_INSERT(Severity.WARNING);
 
         public final Severity severity;
 
