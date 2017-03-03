@@ -23,6 +23,7 @@
  */
 package htsjdk.samtools;
 
+import htsjdk.samtools.SAMValidationError.Severity;
 import htsjdk.samtools.util.BinaryCodec;
 import htsjdk.samtools.util.CigarUtil;
 import htsjdk.samtools.util.CloserUtil;
@@ -431,35 +432,38 @@ public final class SAMUtils {
     /**
      * Handle a list of validation errors according to the validation stringency.
      *
-     * @param validationErrors List of errors to report, or null if there are no errors.
+     * @param errors List of errors to report, or null if there are no errors.
      * @param samRecordIndex Record number of the SAMRecord corresponding to the validation errors, or -1 if
      * the record number is not known.
-     * @param validationStringency If STRICT, throw a SAMFormatException.  If LENIENT, print the validation
+     * @param stringency If STRICT, throw a SAMFormatException.  If LENIENT, print the validation
      * errors to stderr.  If SILENT, do nothing.
      */
-    public static void processValidationErrors(final List<SAMValidationError> validationErrors,
+    public static void processValidationErrors(final List<SAMValidationError> errors,
                                                final long samRecordIndex,
-                                               final ValidationStringency validationStringency) {
-        if (validationErrors != null && !validationErrors.isEmpty()) {
-            for (final SAMValidationError validationError : validationErrors) {
-                validationError.setRecordNumber(samRecordIndex);
+                                               final ValidationStringency stringency) {
+        // Do nothing if SILENT
+        if (stringency == ValidationStringency.SILENT) return;
+
+        if (errors != null && !errors.isEmpty()) {
+            errors.forEach(e -> e.setRecordNumber(samRecordIndex));
+            final boolean onlyWarnings = errors.stream().allMatch(e -> e.getType().severity == Severity.WARNING);
+
+            if (onlyWarnings || stringency == ValidationStringency.LENIENT) {
+                errors.forEach(error -> System.err.println("Ignoring SAM validation error: " + error));
             }
-            if (validationStringency == ValidationStringency.STRICT) {
-                throw new SAMFormatException("SAM validation error: " + validationErrors.get(0));
-            } else if (validationStringency == ValidationStringency.LENIENT) {
-                for (final SAMValidationError error : validationErrors) {
-                    System.err.println("Ignoring SAM validation error: " + error);
-                }
+            else {
+                throw new SAMFormatException("SAM validation error: " + errors.get(0));
             }
         }
     }
 
-    public static void processValidationError(final SAMValidationError validationError,
-                                              final ValidationStringency validationStringency) {
-        if (validationStringency == ValidationStringency.STRICT) {
-            throw new SAMFormatException("SAM validation error: " + validationError);
-        } else if (validationStringency == ValidationStringency.LENIENT) {
-            System.err.println("Ignoring SAM validation error: " + validationError);
+    public static void processValidationError(final SAMValidationError error,
+                                              final ValidationStringency stringency) {
+        if (stringency == ValidationStringency.STRICT && error.getType().severity != Severity.WARNING) {
+            throw new SAMFormatException("SAM validation error: " + error);
+        }
+        else if (stringency == ValidationStringency.LENIENT) {
+            System.err.println("Ignoring SAM validation error: " + error);
         }
 
     }
