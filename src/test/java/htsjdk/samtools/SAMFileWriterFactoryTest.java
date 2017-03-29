@@ -26,12 +26,15 @@ package htsjdk.samtools;
 import htsjdk.HtsjdkTest;
 import htsjdk.samtools.cram.build.CramIO;
 import htsjdk.samtools.cram.ref.ReferenceSource;
+import htsjdk.samtools.seekablestream.SeekableFileStream;
 import htsjdk.samtools.util.IOUtil;
 import org.testng.Assert;
 import org.testng.annotations.DataProvider;
 import org.testng.annotations.Test;
 
 import java.io.*;
+
+import static htsjdk.samtools.SamReader.Type.*;
 
 public class SAMFileWriterFactoryTest extends HtsjdkTest {
 
@@ -178,8 +181,8 @@ public class SAMFileWriterFactoryTest extends HtsjdkTest {
        return numRecs;
     }
 
-    private File prepareOutputFile(String extension) throws IOException {
-        final File outputFile = File.createTempFile("tmp.", extension);
+    private File prepareOutputFileWithSuffix(String suffix) throws IOException {
+        final File outputFile = File.createTempFile("tmp.", suffix);
         outputFile.delete();
         outputFile.deleteOnExit();
         return outputFile;
@@ -197,7 +200,21 @@ public class SAMFileWriterFactoryTest extends HtsjdkTest {
         return factory;
     }
 
-    private void verifyWriterOutput(File outputFile, ReferenceSource refSource, int nRecs, boolean verifySupplementalFiles) {
+    private void verifyWriterOutput(File outputFile, ReferenceSource refSource, int nRecs, boolean verifySupplementalFiles) throws IOException {
+        if (outputFile.getName().endsWith(SamReader.Type.CRAM_TYPE.fileExtension())) {
+            Assert.assertTrue(SamStreams.isCRAMFile(new BufferedInputStream(new SeekableFileStream(outputFile))));
+        }
+
+        if (outputFile.getName().endsWith(SamReader.Type.BAM_TYPE.fileExtension())) {
+            Assert.assertTrue(SamStreams.isBAMFile(new BufferedInputStream (new SeekableFileStream(outputFile))));
+        }
+
+        if (outputFile.getName().endsWith(SamReader.Type.SAM_TYPE.fileExtension())) {
+            byte[] head = new byte[3] ;
+            new DataInputStream(new FileInputStream(outputFile)).readFully(head);
+            Assert.assertEquals("@HD".getBytes(), head);
+        }
+
         if (verifySupplementalFiles) {
             final File indexFile = SamFiles.findIndex(outputFile);
             indexFile.deleteOnExit();
@@ -224,14 +241,16 @@ public class SAMFileWriterFactoryTest extends HtsjdkTest {
     @DataProvider(name="bamOrCramWriter")
     public Object[][] bamOrCramWriter() {
         return new Object[][] {
-                { BamFileIoUtils.BAM_FILE_EXTENSION, },
-                { CramIO.CRAM_FILE_EXTENSION }
+                { SamReader.Type.SAM_TYPE.fileExtension(), },
+                { SamReader.Type.BAM_TYPE.fileExtension(), },
+                { SamReader.Type.CRAM_TYPE.fileExtension() }
         };
     }
 
-    @Test(dataProvider="bamOrCramWriter")
+    @Test(dataProvider = "bamOrCramWriter")
     public void testMakeWriter(String extension) throws Exception {
-        final File outputFile = prepareOutputFile(extension);
+        final File outputFile = prepareOutputFileWithSuffix("." + extension);
+        System.out.println(outputFile.getAbsolutePath());
         final SAMFileHeader header = new SAMFileHeader();
         final SAMFileWriterFactory factory = createWriterFactoryWithOptions(header);
         final File referenceFile = new File(TEST_DATA_DIR, "hg19mini.fasta");
@@ -240,12 +259,12 @@ public class SAMFileWriterFactoryTest extends HtsjdkTest {
         int nRecs = fillSmallBam(samWriter);
         samWriter.close();
 
-        verifyWriterOutput(outputFile, new ReferenceSource(referenceFile), nRecs, true);
+        verifyWriterOutput(outputFile, new ReferenceSource(referenceFile), nRecs, !SamReader.Type.SAM_TYPE.fileExtension().equals(extension));
     }
 
     @Test
     public void testMakeCRAMWriterWithOptions() throws Exception {
-        final File outputFile = prepareOutputFile(CramIO.CRAM_FILE_EXTENSION);
+        final File outputFile = prepareOutputFileWithSuffix("." + CramIO.CRAM_FILE_EXTENSION);
         final SAMFileHeader header = new SAMFileHeader();
         final SAMFileWriterFactory factory = createWriterFactoryWithOptions(header);
         final File referenceFile = new File(TEST_DATA_DIR, "hg19mini.fasta");
@@ -259,7 +278,7 @@ public class SAMFileWriterFactoryTest extends HtsjdkTest {
 
     @Test
     public void testMakeCRAMWriterIgnoresOptions() throws Exception {
-        final File outputFile = prepareOutputFile(CramIO.CRAM_FILE_EXTENSION);
+        final File outputFile = prepareOutputFileWithSuffix("." + CramIO.CRAM_FILE_EXTENSION);
         final SAMFileHeader header = new SAMFileHeader();
         final SAMFileWriterFactory factory = createWriterFactoryWithOptions(header);
         final File referenceFile = new File(TEST_DATA_DIR, "hg19mini.fasta");
@@ -274,7 +293,7 @@ public class SAMFileWriterFactoryTest extends HtsjdkTest {
 
     @Test
     public void testMakeCRAMWriterPresortedDefault() throws Exception {
-        final File outputFile = prepareOutputFile(CramIO.CRAM_FILE_EXTENSION);
+        final File outputFile = prepareOutputFileWithSuffix("." + CramIO.CRAM_FILE_EXTENSION);
         final SAMFileHeader header = new SAMFileHeader();
         final SAMFileWriterFactory factory = createWriterFactoryWithOptions(header);
         final File referenceFile = new File(TEST_DATA_DIR, "hg19mini.fasta");
@@ -291,7 +310,7 @@ public class SAMFileWriterFactoryTest extends HtsjdkTest {
     public void testAsync() throws IOException {
         final SAMFileWriterFactory builder = new SAMFileWriterFactory();
 
-        final File outputFile = prepareOutputFile(BamFileIoUtils.BAM_FILE_EXTENSION);
+        final File outputFile = prepareOutputFileWithSuffix(BamFileIoUtils.BAM_FILE_EXTENSION);
         final SAMFileHeader header = new SAMFileHeader();
         final SAMFileWriterFactory factory = createWriterFactoryWithOptions(header);
         final File referenceFile = new File(TEST_DATA_DIR, "hg19mini.fasta");
@@ -305,4 +324,75 @@ public class SAMFileWriterFactoryTest extends HtsjdkTest {
         writer = builder.setUseAsyncIo(false).makeWriter(header, false, outputFile, referenceFile);
         Assert.assertFalse(writer instanceof AsyncSAMFileWriter, "testAsync option=unset");
     }
+
+    @Test
+    public void testMakeWriterForSamExtension() throws IOException {
+        final File tmpFile = File.createTempFile("testMakeWriterForSamExtension", "." + SAM_TYPE.fileExtension());
+        tmpFile.deleteOnExit();
+        final SAMFileWriter samFileWriter = new SAMFileWriterFactory().makeWriter(new SAMFileHeader(), true, tmpFile, null);
+        samFileWriter.close();
+
+        final FileInputStream fis = new FileInputStream(tmpFile);
+        for (byte b : "@HD\tVN:".getBytes()) {
+            Assert.assertEquals((byte) (fis.read() & 0xFF), b);
+        }
+        fis.close();
+    }
+
+    @Test
+    public void testMakeWriterForBamExtension() throws IOException {
+        final File tmpFile = File.createTempFile("testMakeWriterForBamExtension", "." + BAM_TYPE.fileExtension());
+        tmpFile.deleteOnExit();
+        final SAMFileWriter samFileWriter = new SAMFileWriterFactory().makeWriter(new SAMFileHeader(), true, tmpFile, null);
+        samFileWriter.close();
+
+        Assert.assertTrue(SamStreams.isBAMFile(new BufferedInputStream(new SeekableFileStream(tmpFile))));
+    }
+
+    @Test
+    public void testMakeWriterForCramExtension() throws IOException {
+        final File cramTmpFile = File.createTempFile("testMakeWriterForCramExtension", "." + CRAM_TYPE.fileExtension());
+        cramTmpFile.deleteOnExit();
+        final File refTmpFile = File.createTempFile("testMakeWriterForCramExtension", ".fa");
+        refTmpFile.deleteOnExit();
+        final SAMFileWriter samFileWriter = new SAMFileWriterFactory().makeWriter(new SAMFileHeader(), true, cramTmpFile, refTmpFile);
+        samFileWriter.close();
+
+        Assert.assertTrue(SamStreams.isCRAMFile(new BufferedInputStream(new SeekableFileStream(cramTmpFile))));
+    }
+
+    @Test
+    public void testMakeWriterForNoExtension() throws IOException {
+        final File tmpFile = File.createTempFile("testMakeWriterForNoExtension", "");
+        Assert.assertFalse(tmpFile.getName().contains("."));
+        tmpFile.deleteOnExit();
+        final SAMFileWriter samFileWriter = new SAMFileWriterFactory().makeWriter(new SAMFileHeader(), true, tmpFile, null);
+        samFileWriter.close();
+
+        Assert.assertTrue(SamStreams.isBAMFile(new BufferedInputStream(new SeekableFileStream(tmpFile))));
+    }
+
+    @Test
+    public void testMakeWriterForUnknownFileExtension() throws IOException {
+        final File tmpFile = File.createTempFile("testMakeWriterForUnknownFileExtension", ".png");
+        Assert.assertFalse(tmpFile.getName().endsWith(SamReader.Type.CRAM_TYPE.fileExtension()));
+        Assert.assertFalse(tmpFile.getName().endsWith(SamReader.Type.SAM_TYPE.fileExtension()));
+        Assert.assertFalse(tmpFile.getName().endsWith(SamReader.Type.BAM_TYPE.fileExtension()));
+
+        tmpFile.deleteOnExit();
+        final SAMFileWriter samFileWriter = new SAMFileWriterFactory().makeWriter(new SAMFileHeader(), true, tmpFile, null);
+        samFileWriter.close();
+        Assert.assertTrue(SamStreams.isBAMFile(new BufferedInputStream (new SeekableFileStream(tmpFile))));
+    }
+
+    @Test
+    public void testMakeSamOrBamForCramExtension() throws IOException {
+        final File tmpFile = File.createTempFile("testMakeSamOrBamForCramExtension", "." + CRAM_TYPE.fileExtension());
+        tmpFile.deleteOnExit();
+        final SAMFileWriter samFileWriter = new SAMFileWriterFactory().makeSAMOrBAMWriter(new SAMFileHeader(), true, tmpFile);
+        samFileWriter.close();
+
+        Assert.assertTrue(SamStreams.isBAMFile(new BufferedInputStream(new SeekableFileStream(tmpFile))));
+    }
+
 }
