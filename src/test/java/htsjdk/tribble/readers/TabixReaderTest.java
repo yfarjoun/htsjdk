@@ -82,9 +82,12 @@ public class TabixReaderTest extends HtsjdkTest {
         iter=tabixReader.query("UN:1-100");
         Assert.assertNotNull(iter);
         Assert.assertNull(iter.next());
-       
-        
+
         iter=tabixReader.query("1:10-1");
+        Assert.assertNotNull(iter);
+        Assert.assertNull(iter.next());
+
+        iter=tabixReader.query("chr2:0-1");
         Assert.assertNotNull(iter);
         Assert.assertNull(iter.next());
  
@@ -95,7 +98,15 @@ public class TabixReaderTest extends HtsjdkTest {
         iter=tabixReader.query("1",Integer.MAX_VALUE-1,Integer.MAX_VALUE);
         Assert.assertNotNull(iter);
         Assert.assertNull(iter.next());
-        
+
+        iter=tabixReader.query("1",-1,Integer.MAX_VALUE);
+        Assert.assertNotNull(iter);
+        Assert.assertNull(iter.next());
+
+        iter=tabixReader.query("1",Integer.MAX_VALUE,-1);
+        Assert.assertNotNull(iter);
+        Assert.assertNull(iter.next());
+
         final int pos_snp_in_vcf_chr1=327;
         
         iter=tabixReader.query("1",pos_snp_in_vcf_chr1,pos_snp_in_vcf_chr1);
@@ -110,7 +121,6 @@ public class TabixReaderTest extends HtsjdkTest {
         iter=tabixReader.query("1",pos_snp_in_vcf_chr1+1,pos_snp_in_vcf_chr1+1);
         Assert.assertNotNull(iter);
         Assert.assertNull(iter.next());
-
     }
     
     
