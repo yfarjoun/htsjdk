@@ -58,7 +58,12 @@ public class LiftOverTest extends HtsjdkTest {
     public void testBasic(final Interval in, final Interval expected) {
         final Interval out = liftOver.liftOver(in);
         Assert.assertEquals(out, expected);
+    }
 
+    @Test(dataProvider = "testIntervals")
+    public void testBasicMaxOverlap(final Interval in, final Interval expected) {
+        final Interval out = liftOver.liftOver(in, 0.95, true);
+        Assert.assertEquals(out, expected);
     }
 
     @DataProvider(name = "testIntervals")
